@@ -93,8 +93,34 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
+
+	/*
+		기존 코드
+
+		while (timer_elapsed (start) < ticks)
 		thread_yield ();
+	*/ 	
+
+	/* 
+		timer_elapsed는 현재 시간이 특정 시간(start)으로 부터 얼마나 지났는지를 알려준다.
+		timer_sleep()의 목적은 이렇다.
+		'특정 시간으로부터 일정 tick이 지나기 전에는 thread를 활성화 시키지 않는다 thread_yield'
+
+		하지만 위의 코드를 사용하면 매 tick마다 thread가 run에 올라왔다가 바로 ready로 내려갔다하는 작업을 반복한다(thread_yield). (Context Switching 비용)
+		그래서 이것을 busy_waiting이라고 한다. (대기하면서 CPU를 사용하는 것. 계속 양보).
+
+		- busy_waiting의 정확한 의미(?)
+		>> 원하는 자원을 얻기 위해 기다리는 것이 아니라 권한을 얻을 때까지 확인하는 것을 의미.
+	*/
+
+	/* --------------------- project 1 ------------------------ */
+	/*
+		이를 sleep_list와 block, unblock을 사용하여 CPU를 사용하지 않을 수 있도록 한다.
+		아래와 같이 코드를 작성하면, thread를 원할 때까지 비활성화할 수 있고, 그 사이에 다른 thread가 CPU를 사용할 수 있게 된다.
+		thread_sleep(start + tick)은 스레드를 현재 시간(start)로 부터 몇 tick (ticks) 뒤에 깨어나게 할지 설정할 수 있도록 해준다.
+	*/
+	thread_sleep(start + ticks);
+	/* --------------------- project 1 ------------------------ */
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -125,7 +151,22 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick ();
+	thread_tick (); // 코드를 제출했을 때, 검사하는 함수
+
+	int64_t next_tick;
+	next_tick = get_next_tick_to_awake();
+	/* --------------------- project 1 ------------------------ */
+	/*
+		timer_interrupt가 들어올 때, (시간이 증가할 때),
+		현재 ticks보다 작은 wakeup_tick이 있는지 판단한다.
+
+		만약 있다면, thread_awake()를 호출하여 sleep_list에서 꺼낸다.
+	*/
+
+	if (ticks >= next_tick) {
+		thread_awake(ticks);
+	}
+	/* --------------------- project 1 ------------------------ */
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

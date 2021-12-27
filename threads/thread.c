@@ -28,6 +28,14 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* --------------------- project 1 ------------------------ */
+// THREAD_BLOCKED 상태의 스레드를 관리하기 위한 리스트 자료구조 추가.
+static struct list sleep_list;
+
+// sleep_list에서 대기중인 스레드들의 wakeup_tick값 중 최소값을 저장.
+static int64_t next_tick_to_awake;
+/* --------------------- project 1 ------------------------ */
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -44,6 +52,11 @@ static struct list destruction_req;
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+
+/* --------------------- project 1 ------------------------ */
+// sleep_list에서 대기중인 스레드들의 wakeup_tick값 중 최소값을 저장
+static long long next_tick_to_awake;
+/* --------------------- project 1 ------------------------ */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -108,7 +121,14 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+
 	list_init (&destruction_req);
+
+	/* --------------------- project 1 ------------------------ */
+	// sleep_list 초기화
+	list_init(&sleep_list);
+	next_tick_to_awake = INT64_MAX;
+	/* --------------------- project 1 ------------------------ */
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -588,3 +608,50 @@ allocate_tid (void) {
 
 	return tid;
 }
+
+/* --------------------- project 1 ------------------------ */
+void
+thread_sleep(int64_t ticks) {
+	struct thread *curr = thread_current();
+	enum intr_level old_level;
+	ASSERT(!intr_context());
+	old_level = intr_disable();
+ 
+	curr -> wakeup_tick = ticks;
+ 
+	if (curr != idle_thread) {
+		// yield에서는 ready_list로 보냈지만, thread_sleep에서는 sleep_list로 보낸다.
+		list_push_back(&sleep_list, &curr->elem);
+	}
+	
+	/*
+		sleep_list가 새로 만들어져 깨워야할 스레드가 바뀔 가능성이 생겼으므로,
+		update_next_tick_to_awake를 통해 next_tick_to_awake를 갱신해준다.
+	*/
+	update_next_tick_to_awake(ticks);
+
+	// thread status를 ready가 아닌 blocked로 변경
+	do_schedule(THREAD_BLOCKED);
+	intr_set_level(old_level);
+}
+/* --------------------- project 1 ------------------------ */
+/* --------------------- project 1 ------------------------ */
+void
+thread_awake(int64_t ticks) {
+	next_tick_to_awake = INT64_MAX;
+	struct list_elem *e = list_begin(&sleep_list);
+	struct thread *t;
+ 
+	for (e ; e != list_end(&sleep_list);) {
+		t = list_entry(e, struct thread, elem);
+		if (t->wakeup_tick <= ticks) {
+			e = list_remove(&t->elem);
+			thread_unblock(t);
+		}
+		else {
+			update_next_tick_to_awake(t->wakeup_tick);
+			e = list_next(e);
+		}
+	}
+}
+/* --------------------- project 1 ------------------------ */
