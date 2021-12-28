@@ -92,8 +92,13 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 
-	/* Shared between thread.c and synch.c. */
+	/* Shared between thread.c and synch.c. & list.c도! */
 	struct list_elem elem;              /* List element. */
+
+	/*---Project 1---*/
+
+	/* 깨어나야 할 tick 저장 (wa) */
+	int64_t wakeup_tick;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -132,6 +137,24 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+/*----project 1.1: Alarm Clock------*/
+
+/* 실행 중인 스레드를 슬립으로 재운다. */
+void thread_sleep(int64_t ticks);
+/* 슬립 큐에서 깨워야 할 스레드를 깨운다. */
+void thread_awake(int64_t ticks);
+/* 최소 틱을 가진 스레드를 저장한다. */
+void update_next_tick_to_awake(int64_t ticks);
+/* thread.c의 next_tick_to_awake 반환 */
+int64_t get_next_tick_to_awake(void);
+
+
+/* ----Project 1.2: Priority Scheduling---- */
+void test_max_priority (void);
+bool cmp_priority (const struct list_elem *a,
+					const struct list_elem *b,
+					void *aux UNUSED);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
