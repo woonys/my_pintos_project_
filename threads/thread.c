@@ -415,12 +415,15 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	/* --- Pjt 1.2 --- */
+	test_max_priority();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+	
 }
 
 /* Sets the current thread's nice value to NICE. */
