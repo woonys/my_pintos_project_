@@ -101,8 +101,7 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 
 	/*---Project 1.1---*/
-
-	/* 깨어나야 할 tick 저장 (wa) */
+	/* ---깨어나야 할 tick 저장--- */
 	int64_t wakeup_tick;
 
 #ifdef USERPROG
@@ -174,3 +173,8 @@ int thread_get_load_avg (void);
 void do_iret (struct intr_frame *tf);
 
 #endif /* threads/thread.h */
+
+/* ----Project 1.4: Priority donation---- */
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
