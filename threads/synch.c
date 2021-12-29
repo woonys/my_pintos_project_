@@ -66,7 +66,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		//list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, cmp_priority, 0);
 		thread_block ();
 	}
 	sema->value--;
@@ -110,9 +111,15 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	{ /* project 1.3 Priority Scheduling & Sync */ 
+		list_sort(&sema->waiters, cmp_priority, 0); 
+		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem)); 
+	}
 	sema->value++;
+
+	/* --- project 1.3 Priority Scheduling & Sync --- */ 
+	test_max_priority(); 
+	/* --- project 1.3 Priority Scheduling & Sync --- */
 	intr_set_level (old_level);
 }
 
@@ -282,7 +289,10 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	/* --- project 1.3 priority scheduling & sync 8--- */ 
+	//list_push_back (&cond->waiters, &waiter.elem); 
+	list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_priority, 0); 
+	/* --- project 1.3 priority scheduling & sync 8--- */
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -303,8 +313,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
+	{
+		/* --- project 1.3 Priority scheduling & sync --- */ 
+		list_sort(&cond->waiters, cmp_sem_priority, 0); 
+		/* --- project 1.3 Priority scheduling & sync --- */
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -320,4 +335,18 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+/* --- project 1.3 --- */ 
+bool cmp_sem_priority (const struct list_elem *a, const struct list_elem *b, void *aux)
+ {
+	 struct semaphore_elem * sa = list_entry(a, struct semaphore_elem, elem); 
+	 struct semaphore_elem * sb = list_entry(b, struct semaphore_elem, elem); 
+	 
+	 struct list_elem *sa_e = list_begin(&(sa->semaphore.waiters)); 
+	 struct list_elem *sb_e = list_begin(&(sb->semaphore.waiters)); 
+	 struct thread *sa_t = list_entry(sa_e, struct thread, elem); 
+	 struct thread *sb_t = list_entry(sb_e, struct thread, elem); 
+	 
+	 return (sa_t->priority) > (sb_t->priority); 
 }
