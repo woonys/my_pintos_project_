@@ -495,19 +495,6 @@ void mlfqs_recalculate_recent_cpu()
 	le = list_next(le);
 	}
 }
-void mlfqs_recalculate(ticks, freq)
-{
-	mlfqs_increment();
-	if (ticks % 4 == 0)
-	{
-		mlfqs_recalculate_priority();
-		if (ticks % freq == 0)
-		{
-			mlfqs_recalculate_recent_cpu();
-			mlfqs_load_avg();
-		}
-	}
-}
 
 static void
 idle (void *idle_started_ UNUSED) {

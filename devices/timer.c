@@ -104,8 +104,17 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	/// 1-4
 	// thread_mlfqs 옵션을 켰을 경우 mlfqs 연관 factor들 갱신
 	if (thread_mlfqs)
-	{
-		mlfqs_recalculate(ticks, TIMER_FREQ);
+	{	
+		mlfqs_increment();
+		if (ticks % 4 == 0)
+		{
+			mlfqs_recalculate_priority();
+			if (ticks % TIMER_FREQ == 0)
+			{
+				mlfqs_recalculate_recent_cpu();
+				mlfqs_load_avg();
+			}
+		}
 	}
 
 	/// 1-1

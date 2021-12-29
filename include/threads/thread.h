@@ -177,7 +177,6 @@ void mlfqs_load_avg(void);
 void mlfqs_recalculate_priority();
 void mlfqs_recalculate_recent_cpu();
 void mlfqs_increment(void);
-void mlfqs_recalculate(int ticks, int freq);
 
 void do_iret (struct intr_frame *tf);
 
