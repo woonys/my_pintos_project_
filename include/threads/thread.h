@@ -91,9 +91,19 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	/*---Project 1.4 Priority donation ---*/
+	int init_priority; // thread의 priority는 donation에 의해 매번 바뀔 수 있음. 그러니 맨 처음에 할당받은 priority를 기억해둬야!
+	struct lock *wait_on_lock; // 해당 스레드가 대기하고 있는 lock 자료구조 주소 저장: thread가 원하는 lock을 이미 다른 thread가 점유하고 있으면 lock의 주소를 저장한다.
+	struct list donations; // multiple donation 고려하기 위해 사용: A thread가 B thread에 의해 priority가 변경됐다면 A thread의 list donations에 B 스레드를 기억해놓는다.
+	struct list_elem donation_elem; // multiple donation 고려하기 위해 사용: B thread는 A thread의 기부자 목록에 자신 이름 새겨놓아야! 이를 donation_elem!
 
-	/* Shared between thread.c and synch.c. */
+	/* Shared between thread.c and synch.c. & list.c도! */
 	struct list_elem elem;              /* List element. */
+
+	/*---Project 1.1---*/
+
+	/* 깨어나야 할 tick 저장 (wa) */
+	int64_t wakeup_tick;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -132,6 +142,26 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+/*----project 1.1: Alarm Clock------*/
+
+/* 실행 중인 스레드를 슬립으로 재운다. */
+void thread_sleep(int64_t ticks);
+/* 슬립 큐에서 깨워야 할 스레드를 깨운다. */
+void thread_awake(int64_t ticks);
+/* 최소 틱을 가진 스레드를 저장한다. */
+void update_next_tick_to_awake(int64_t ticks);
+/* thread.c의 next_tick_to_awake 반환 */
+int64_t get_next_tick_to_awake(void);
+
+
+/* ----Project 1.2: Priority Scheduling---- */
+void test_max_priority (void);
+bool cmp_priority (const struct list_elem *a,
+					const struct list_elem *b,
+					void *aux UNUSED);
+
+
 
 int thread_get_priority (void);
 void thread_set_priority (int);
