@@ -1,5 +1,6 @@
 #ifndef THREADS_SYNCH_H
 #define THREADS_SYNCH_H
+#define UNUSED __attribute__ ((unused))
 
 #include <list.h>
 #include <stdbool.h>
@@ -37,6 +38,11 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+/// 1-2
+bool CMPsem_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+/// 1-3
+void remove_with_lock (struct lock *lock);
 
 /* Optimization barrier.
  *

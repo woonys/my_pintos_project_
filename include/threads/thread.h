@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -107,6 +109,19 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+	
+	/// 1-1
+	int64_t awaketick; // 기상시각
+	/// 1-3
+	struct lock *lock_wait; // 어느 lock을 기다리고 있는지 기록. lock.holder와 연쇄적으로 쓰여  curr의 대기에 관계된 모든 스레드에 도네이션하기 위해 선언
+	struct list donation_list; // priority를 제공한 스레드들의 리스트. lock 해제시 priority를 되돌리기 위해 기록
+	struct list_elem donation_elem; // 타 구조체의 donation_list에 들어가 list lib을 쓰기 위한 elem 구조체
+	int priority_initial; // 도네이션에 의해 갱신되지 않는 고윳값 보관
+
+	/// 1-4
+	int nice;
+  	int recent_cpu;
+
 };
 
 /* If false (default), use round-robin scheduler.
@@ -133,6 +148,20 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
+/// 1-1
+int64_t threads_awaketime(void);
+void threads_awake(int64_t);
+void thread_sleep(int64_t);
+
+/// 1-2
+void check_priority_to_yield(void);
+bool CMP_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+/// 1-3
+bool CMPdona_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void donate_priority(void);
+void refresh_priority(void);
+
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -140,6 +169,15 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/// 1-4
+void mlfqs_priority(struct thread *thread_target);
+void mlfqs_recent_cpu(struct thread *thread_target);
+void mlfqs_load_avg(void);
+void mlfqs_recalculate_priority();
+void mlfqs_recalculate_recent_cpu();
+void mlfqs_increment(void);
+void mlfqs_recalculate(int ticks, int freq);
 
 void do_iret (struct intr_frame *tf);
 
