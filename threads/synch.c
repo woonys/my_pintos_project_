@@ -196,18 +196,18 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!lock_held_by_current_thread (lock));
 
 	/* --- Pjt 1.4 priority donation --- */
-	struct thread *t = thread_current();
-	if (lock->holder != NULL) {
-		t->wait_on_lock = lock;
-		list_push_back(&lock->holder->donations, &t->donation_elem);
+	struct thread *cur = thread_current();
+	if (lock->holder) {
+		cur->wait_on_lock = lock;
+		list_insert_ordered(&lock->holder->donations, &cur->donation_elem, thread_compare_donate_priority, 0);
 		donate_priority();
 	}
 
 	sema_down (&lock->semaphore);
 	//lock->holder = thread_current ();
 	/* --- Pjt 1.4 priority donation --- */
-	t->wait_on_lock = NULL;
-	lock->holder = t;
+	cur->wait_on_lock = NULL;
+	lock->holder = cur;
 	/* --- Pjt 1.4 priority donation --- */
 
 
@@ -242,6 +242,9 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+
+	remove_with_lock(lock);
+	refresh_priority();
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
@@ -364,3 +367,4 @@ bool cmp_sem_priority (const struct list_elem *a, const struct list_elem *b, voi
 	 
 	 return (sa_t->priority) > (sb_t->priority); 
 }
+

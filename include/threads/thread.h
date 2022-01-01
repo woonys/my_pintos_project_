@@ -178,3 +178,6 @@ void do_iret (struct intr_frame *tf);
 void donate_priority(void);
 void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
+
+/* --- project 1.4 --- */
+bool thread_compare_donate_priority(const struct list_elem *l, const struct list_elem *s, void *aux);
