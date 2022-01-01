@@ -161,26 +161,52 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) {
-	char *file_name = f_name;
+process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도록 프로그램을 메모리에 적재하고 실행하는 함수. 여기에 파일 네임 인자로 받아서 저장(문자열) => 근데 실행 프로그램 파일과 옵션이 분리되지 않은 상황.
+	char *file_name = f_name; // f_name은 문자열인데 위에서 (void *)로 넘겨받음! -> 문자열로 인식하기 위해서 char * 로 변환해줘야.
+	/* --- Project 2 ---*/
+	/* 원본 file name을 copy해오기 */
+	char *file_name_copy[48]; // 왜 길이가 48이지?
+	memcpy(file_name_copy, file_name, strlen(file_name)+1); // strlen에 +1? => 원래 문자열에는 \n이 들어가는데 strlen에서는 \n 앞까지만 읽고 끝내기 때문. 전체를 들고오기 위해 +1
+	/* --- Project 2 ---*/
+
 	bool success;
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
-	struct intr_frame _if;
+	struct intr_frame _if; // intr_frame 내 구조체 멤버에 필요한 정보를 담는다.
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
 	process_cleanup ();
+	// 새로운 실행 파일을 현재 스레드에 담기 전에 먼저 현재 process에 담긴 context를 지워준다.
+	// 지운다? => 현재 프로세스에 할당된 page directory를 지운다는 뜻.
 
+	/* --- Project 2 ---*/
+	char * token, save_ptr;
+	int token_count = 0;
+	char arg_list[64];
+	char file_name_first = token;
+	file_name_first = strtok_r(file_name_copy, " ", &save_ptr); // 첫번째 이름을 받아온다.
+	arg_list[token_count] = file_name_first;
+	while (token != NULL) {
+		token = strtok_r (NULL, " ", &save_ptr);
+		token_count++;
+		arg_list[token_count] = token;
+	}
+   	
 	/* And then load the binary */
-	success = load (file_name, &_if);
-
+	success = load (file_name_first, &_if); // file_name, _if를 현재 프로세스에 load.
+	// success는 bool type이니까 load에 성공하면 1, 실패하면 0 반환.
+	// 이때 file_name: f_name의 첫 문자열을 parsing하여 넘겨줘야 한다!
+	
+	argument_stack(arg_list, token_count, &_if);
+	/* --- Project 2 ---*/
+	
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
 	if (!success)
 		return -1;
 
@@ -328,6 +354,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
