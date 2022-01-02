@@ -42,16 +42,20 @@ tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
-
+	char *token, last;
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	/* project 2. command line parsing */
+	token = strtok_r(file_name, " ", &last);
+	/* project 2. command line parsing */
+
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (token, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -163,11 +167,12 @@ error:
 int
 process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도록 프로그램을 메모리에 적재하고 실행하는 함수. 여기에 파일 네임 인자로 받아서 저장(문자열) => 근데 실행 프로그램 파일과 옵션이 분리되지 않은 상황.
 	char *file_name = f_name; // f_name은 문자열인데 위에서 (void *)로 넘겨받음! -> 문자열로 인식하기 위해서 char * 로 변환해줘야.
-	/* --- Project 2 ---*/
+	/* --- Project 2: Command_line_parsing ---*/
 	/* 원본 file name을 copy해오기 */
 	char *file_name_copy[48]; // 왜 길이가 48이지?
+	/* 동적으로 할당하면?*/
 	memcpy(file_name_copy, file_name, strlen(file_name)+1); // strlen에 +1? => 원래 문자열에는 \n이 들어가는데 strlen에서는 \n 앞까지만 읽고 끝내기 때문. 전체를 들고오기 위해 +1
-	/* --- Project 2 ---*/
+	/* --- Project 2: Command_line_parsing ---*/
 
 	bool success;
 
@@ -184,13 +189,13 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	// 새로운 실행 파일을 현재 스레드에 담기 전에 먼저 현재 process에 담긴 context를 지워준다.
 	// 지운다? => 현재 프로세스에 할당된 page directory를 지운다는 뜻.
 
-	/* --- Project 2 ---*/
+	/* --- Project 2: Command_line_parsing ---*/
 	char * token, save_ptr;
 	int token_count = 0;
 	char arg_list[64];
-	char file_name_first = token;
-	file_name_first = strtok_r(file_name_copy, " ", &save_ptr); // 첫번째 이름을 받아온다.
-	arg_list[token_count] = file_name_first;
+	token = strtok_r(file_name_copy, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
+	char *file_name_first = token;
+	arg_list[token_count] = token;
 	while (token != NULL) {
 		token = strtok_r (NULL, " ", &save_ptr);
 		token_count++;
@@ -201,18 +206,70 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	success = load (file_name_first, &_if); // file_name, _if를 현재 프로세스에 load.
 	// success는 bool type이니까 load에 성공하면 1, 실패하면 0 반환.
 	// 이때 file_name: f_name의 첫 문자열을 parsing하여 넘겨줘야 한다!
-	
-	argument_stack(arg_list, token_count, &_if);
-	/* --- Project 2 ---*/
+	// _if: context switching에 필요한 정보.
 	
 	/* If load failed, quit. */
 	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
 	if (!success)
+	{
 		return -1;
-
+	}
+	/* --- Project 2: Command_line_parsing ---*/
+	argument_stack(arg_list, token_count, &_if);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
+}
+
+/* --- Project 2: Command_line_parsing ---*/
+/* 인자를 stack에 올린다. */
+void argument_stack(char **argv, int argc, struct intr_frame *if_) { // if_는 인터럽트 스택 프레임 => 여기에다가 쌓는다.
+
+	/* insert arguments' address */
+	char *arg_address[128];
+
+	// 거꾸로 삽입 => 스택은 반대 방향으로 확장하기 떄문!
+	
+	/* 맨 끝 NULL 값(arg[4]) 제외하고 스택에 저장(arg[0] ~ arg[3]) */
+	for (int i = argc-1; i>=0; i--) { 
+		int argv_len = strlen(argv[i]);
+		/* 
+		if_->rsp: 현재 user stack에서 현재 위치를 가리키는 스택 포인터.
+		각 인자에서 인자 크기(argv_len)를 읽고 (이때 각 인자에 sentinel이 포함되어 있으니 +1 - strlen에서는 sentinel 빼고 읽음)
+		그 크기만큼 rsp를 내려준다. 그 다음 빈 공간만큼 memcpy를 해준다.
+		 */
+		if_->rsp = if_->rsp - (argv_len + 1);
+		memcpy(if_->rsp, argv[i], argv_len+1);
+		arg_address[i] = if_->rsp; // arg_address 배열에 현재 문자열 시작 주소 위치를 저장한다.
+	}
+
+	/* word-align: 8의 배수 맞추기 위해 padding 삽입*/
+	while (if_->rsp % 8 != 0) 
+	{
+		if_->rsp--; // 주소값을 1 내리고
+		*(uint8_t *) if_->rsp = 0; //데이터에 0 삽입 => 8바이트 저장
+	}
+
+	/* 이제는 주소값 자체를 삽입! 이때 센티넬 포함해서 넣기*/
+	
+	for (int i = argc; i >=0; i--) 
+	{ // 여기서는 NULL 값 포인터도 같이 넣는다.
+		if_->rsp = if_->rsp - 8; // 8바이트만큼 내리고
+		if (i == argc) { // 가장 위에는 NULL이 아닌 0을 넣어야지
+			memset(if_->rsp, 0, 8);
+		} else { // 나머지에는 arg_address 안에 들어있는 값 가져오기
+			memcpy(if_->rsp, &arg_address[i], 8); // char 포인터 크기: 8바이트
+		}	
+	}
+
+	/* fake return address */
+	if_->rsp = if_->rsp - 8; // void 포인터도 8바이트 크기
+	memset(if_->rsp, 0, sizeof(void *));
+
+
+	if_->R.rdi  = argc;
+	if_->R.rsi = if_->rsp + 8; // fake_address 바로 위: arg_address 맨 앞 가리키는 주소값!
+
 }
 
 
@@ -230,6 +287,11 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	
+	/* --- Project 2: Command_line_parsing ---*/
+	while (1){
+	}
+	/* --- Project 2: Command_line_parsing ---*/
 	return -1;
 }
 
