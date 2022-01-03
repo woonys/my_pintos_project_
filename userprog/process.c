@@ -171,25 +171,9 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	bool success;
 	/* --- Project 2: Command_line_parsing ---*/
 	/* 원본 file name을 copy해오기 */
-	char *file_name_copy[48]; // 왜 길이가 48이지?
+	char file_name_copy[128]; // 스택에 저장
+	// file_name_copy = palloc_get_page(PAL_USER); // 이렇게는 가능 but 비효율적.
 	memcpy(file_name_copy, file_name, strlen(file_name)+1); // strlen에 +1? => 원래 문자열에는 \n이 들어가는데 strlen에서는 \n 앞까지만 읽고 끝내기 때문. 전체를 들고오기 위해 +1
-	/* --- Project 2: Command_line_parsing ---*/
-
-	/* --- Project 2: Command_line_parsing ---*/
-	char *token, *save_ptr;
-	int token_count = 0;
-	char *arg_list[64];
-	token = strtok_r(file_name_copy, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
-	char *file_name_first = token;
-	arg_list[token_count] = token;
-	
-	while (token != NULL) {
-		token = strtok_r (NULL, " ", &save_ptr);
-		token_count++;
-		arg_list[token_count] = token;
-	}
-   	
-	
 	/* --- Project 2: Command_line_parsing ---*/
 
 
@@ -213,7 +197,7 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 
 
 	/* And then load the binary */
-	success = load (file_name_first, &_if); // file_name, _if를 현재 프로세스에 load.
+	success = load (file_name_copy, &_if); // file_name, _if를 현재 프로세스에 load.
 	// success는 bool type이니까 load에 성공하면 1, 실패하면 0 반환.
 	// 이때 file_name: f_name의 첫 문자열을 parsing하여 넘겨줘야 한다!
 	// _if: context switching에 필요한 정보.
@@ -224,12 +208,10 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 		return -1;
 	}
 
+	//palloc_free_page(file_name_copy);
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* --- Project 2: Command_line_parsing ---*/
-	argument_stack(arg_list, token_count, &_if);
-	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
-	/* --- Project 2: Command_line_parsing ---*/
-
-	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
+	//palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
 	/* Start switched process. */
 	
 	do_iret (&_if);
@@ -429,6 +411,24 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
+	/* --- Project 2: Command_line_parsing ---*/
+	/* --- Project 2: Command_line_parsing ---*/
+	char *token;
+	int token_count = 0;
+	char *arg_list[128];
+
+	char *file_name_first, *save_ptr;
+	file_name_first = strtok_r(file_name, " ", &save_ptr); // 첫번째 이름
+	//token = strtok_r(file_name_total, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
+	arg_list[token_count] = file_name_first; //arg_list[0] = file_name_first
+	
+	while (token != NULL) {
+		token = strtok_r (NULL, " ", &save_ptr);
+		token_count++;
+		arg_list[token_count] = token;
+	}
+	/* --- Project 2: Command_line_parsing ---*/
+
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -436,10 +436,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (file_name_first);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", file_name_first);
 		goto done;
 	}
 
@@ -451,7 +452,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf ("load: %s: error loading executable\n", file_name_first);
 		goto done;
 	}
 
@@ -517,6 +518,13 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+
+
+	/* --- Project 2: Command_line_parsing ---*/
+	argument_stack(arg_list, token_count, if_);
+	/* --- Project 2: Command_line_parsing ---*/
+
+
 
 	success = true;
 
