@@ -43,8 +43,11 @@ syscall_init (void) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
+	/* 유저 스택에 저장되어 있는 시스템 콜 넘버를 가져와야지 일단 */
+	int sys_number = f->R.rax;
+
 	// TODO: Your implementation goes here.
-	switch(number) {
+	switch(sys_number) {
 		case SYS_HALT:
 			halt();
 		
@@ -53,27 +56,30 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		
 		case SYS_EXEC:
 			exec();
-
 	}
 	printf ("system call!\n");
 	thread_exit ();
 }
 
-void check_address(void *addr) {
-	unsigned int user_addr_start = 0x8048000;
-	unsigned int user_addr_finish= 0xc0000000;	
-
-	/* 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수.	
+/* 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수.	
 	유저 영역을 벗어난 영역일 경우 프로세스 종료 (exit(-1))*/
-
+void check_address(void *addr) {
 	/* --- Project 2: User memory access --- */
-	if (!(user_addr_start > addr) || !(addr > user_addr_finish)) {
+	if (!is_user_vaddr(addr)||addr == NULL)
+	{
 		exit(-1);
-	/* --- Project 2: User memory access --- */
 	}
 }
-
+/* 유저 스택에 있는 인자들을 커널에 저장하는 함수. 스택 포인터(esp)에 count(인자 개수)만큼의 데이터를 arg에 저장.*/
 void get_argument(void *esp, int *arg, int count) {
-	/* 유저 스택에 있는 인자들을 커널에 저장하는 함수. 스택 포인터(esp)에 count(인자 개수)만큼의 데이터를 arg에 저장.*/
+	/* --- project 2: system call ---*/
+	int *esp_ = esp; // 4바이트 => int 사이즈!
+	for (int i = 0; i < count; i++) {
+		check_address(&esp_[i]);
+		check_address(&arg[i]);
+		arg[i] = esp_[i];
+	}
 	
+
+
 }
