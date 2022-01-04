@@ -7,6 +7,7 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/init.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -44,18 +45,38 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	/* 유저 스택에 저장되어 있는 시스템 콜 넘버를 가져와야지 일단 */
-	int sys_number = f->R.rax;
-
+	int sys_number = f->R.rax; // rax: 시스템 콜 넘버
+	check_address(sys_number);
 	// TODO: Your implementation goes here.
 	switch(sys_number) {
 		case SYS_HALT:
 			halt();
-		
 		case SYS_EXIT:
 			exit();
-		
+		case SYS_FORK:
+			fork();		
 		case SYS_EXEC:
 			exec();
+		case SYS_WAIT:
+			wait();
+		case SYS_CREATE:
+			create();		
+		case SYS_REMOVE:
+			remove();		
+		case SYS_OPEN:
+			open();		
+		case SYS_FILESIZE:
+			filesize();
+		case SYS_READ:
+			read();
+		case SYS_WRITE:
+			write();		
+		case SYS_SEEK:
+			seek();		
+		case SYS_TELL:
+			tell();		
+		case SYS_CLOSE:
+			close();	
 	}
 	printf ("system call!\n");
 	thread_exit ();
@@ -79,7 +100,40 @@ void get_argument(void *esp, int *arg, int count) {
 		check_address(&arg[i]);
 		arg[i] = esp_[i];
 	}
-	
-
-
 }
+
+void halt(void){
+	/* pintos 종료시키는 함수 */
+	power_off();
+}
+
+void exit(int status)
+{	
+	struct thread *t = thread_current();
+	/* 현재 프로세스를 종료시키는 시스템 콜 */
+	printf("%s: exit%d\n", t->name, status); // Process Termination Message
+	/* 정상적으로 종료됐다면 status는 0 */
+	/* status: 프로그램이 정상적으로 종료됐는지 확인 */
+	thread_exit();
+}
+
+bool create (const char *file, unsigned initial_size) {
+	/* 파일 생성하는 시스템 콜 */
+	/* 성공이면 true, 실패면 false */
+	if (filesys_create(file, initial_size)) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+bool remove (const char *file) {
+	if (filesys_remove(file)) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
