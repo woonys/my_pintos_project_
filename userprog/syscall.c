@@ -62,6 +62,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 void check_address(void *addr) {
 	unsigned int user_addr_start = 0x8048000;
 	unsigned int user_addr_finish= 0xc0000000;	
+
 	/* 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수.	
 	유저 영역을 벗어난 영역일 경우 프로세스 종료 (exit(-1))*/
 
