@@ -49,14 +49,14 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 	/* project 2. command line parsing */
-	char *token, *last;
-	token = strtok_r(file_name, " ", &last);
-	tid = thread_create (token, PRI_DEFAULT, initd, fn_copy);
+	// char *token, *last;
+	// token = strtok_r(file_name, " ", &last);
+	// tid = thread_create (token, PRI_DEFAULT, initd, fn_copy);
 	/* project 2. command line parsing */
 
 
 	/* Create a new thread to execute FILE_NAME. */
-	//tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -192,7 +192,7 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 
 	
 	/* --- Project 2: Command_line_parsing ---*/
-	memset(&_if, 0, sizeof _if);
+	//memset(&_if, 0, sizeof _if);
 	/* --- Project 2: Command_line_parsing ---*/
 
 
@@ -203,12 +203,13 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	// _if: context switching에 필요한 정보.
 	
 	/* If load failed, quit. */
+	//palloc_free_page(file_name);
 	if (!success)
 	{
 		return -1;
 	}
 
-	//palloc_free_page(file_name_copy);
+	
 	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* --- Project 2: Command_line_parsing ---*/
 	//palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
@@ -254,17 +255,19 @@ void argument_stack(char **argv, int argc, struct intr_frame *if_) { // if_는 �
 	{ // 여기서는 NULL 값 포인터도 같이 넣는다.
 		if_->rsp = if_->rsp - 8; // 8바이트만큼 내리고
 		if (i == argc) { // 가장 위에는 NULL이 아닌 0을 넣어야지
-			memset(if_->rsp, 0, sizeof(char *));
+			memset(if_->rsp, 0, sizeof(char **));
 		} else { // 나머지에는 arg_address 안에 들어있는 값 가져오기
-			memcpy(if_->rsp, &arg_address[i], sizeof(char *)); // char 포인터 크기: 8바이트
+			memcpy(if_->rsp, &arg_address[i], sizeof(char **)); // char 포인터 크기: 8바이트
 		}	
 	}
-	if_->R.rdi  = argc;
-	if_->R.rsi = if_->rsp + 8; // fake_address 바로 위: arg_address 맨 앞 가리키는 주소값!
+	
 
 	/* fake return address */
 	if_->rsp = if_->rsp - 8; // void 포인터도 8바이트 크기
 	memset(if_->rsp, 0, sizeof(void *));
+
+	if_->R.rdi  = argc;
+	if_->R.rsi = if_->rsp + 8; // fake_address 바로 위: arg_address 맨 앞 가리키는 주소값!
 }
 
 
@@ -412,15 +415,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	int i;
 
 	/* --- Project 2: Command_line_parsing ---*/
-	/* --- Project 2: Command_line_parsing ---*/
-	char *token;
-	int token_count = 0;
 	char *arg_list[128];
-
-	char *file_name_first, *save_ptr;
-	file_name_first = strtok_r(file_name, " ", &save_ptr); // 첫번째 이름
+	char *token, *save_ptr;
+	int token_count = 0;
+ 
+	token = strtok_r(file_name, " ", &save_ptr); // 첫번째 이름
 	//token = strtok_r(file_name_total, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
-	arg_list[token_count] = file_name_first; //arg_list[0] = file_name_first
+	arg_list[token_count] = token; //arg_list[0] = file_name_first
 	
 	while (token != NULL) {
 		token = strtok_r (NULL, " ", &save_ptr);
@@ -438,9 +439,9 @@ load (const char *file_name, struct intr_frame *if_) {
 
 
 	/* Open executable file. */
-	file = filesys_open (file_name_first);
+	file = filesys_open (file_name);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name_first);
+		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
@@ -452,7 +453,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name_first);
+		printf ("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
 
