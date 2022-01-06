@@ -85,7 +85,7 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct thread {
+struct thread { // 이 struct thread 자체가 프로세스 디스크립터
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
@@ -107,6 +107,8 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	/*---Project 2: Process Priority---*/
+	
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -116,6 +118,15 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	/* --- Project2: User programs - system call --- */
+	int exit_status; // _exit(), _wait() 구현 때 사용
+	struct list child_list; // _wait() 구현 때 사용, process_wait() 함수
+	struct list_elem child_elem; // _wait() 구현 때 사용, process_wait() 함수
+	struct intr_frame parent_if; // _fork() 구현 때 사용, __do_fork() 함수
+	struct list file_descriptor_table; //FDT
+	struct file *executing_file;
+
 };
 
 /* If false (default), use round-robin scheduler.
