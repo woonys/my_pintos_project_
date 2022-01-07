@@ -4,13 +4,39 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
-#include "userprog/gdt.h"
 #include "threads/flags.h"
+#include "threads/synch.h"
+#include "threads/init.h" 
+#include "filesys/filesys.h"
+#include "filesys/file.h" 
+#include "userprog/gdt.h"
 #include "intrinsic.h"
-#include "threads/init.h"
+
+#define	STDIN_FILENO	0
+#define	STDOUT_FILENO	1
+
+#define MAX_FD_NUM	(1<<9)
+void check_address(void *addr);
+struct file *fd_to_struct_filep(int fd);
+int add_file_to_fd_table(struct file *file);
+void remove_file_from_fd_table(int fd);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+void halt (void);
+void exit (int);
+void close (int fd);
+bool create (const char *file , unsigned initial_size);
+bool remove (const char *file);
+int open (const char *file);
+int write (int fd, const void *buffer, unsigned size);
+int exec(char *file_name);
+
+void syscall_entry (void);
+void syscall_handler (struct intr_frame *);
+// pid_t fork (const char *thread_name);
+
 
 /* System call.
  *
@@ -24,6 +50,9 @@ void syscall_handler (struct intr_frame *);
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+
 
 void
 syscall_init (void) {
@@ -46,80 +75,90 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	/* 유저 스택에 저장되어 있는 시스템 콜 넘버를 가져와야지 일단 */
 	int sys_number = f->R.rax; // rax: 시스템 콜 넘버
-	check_address(sys_number);
+	/* 
+	인자 들어오는 순서:
+	1번째 인자: %rdi
+	2번째 인자: %rsi
+	3번째 인자: %rdx
+	4번째 인자: %r10
+	5번째 인자: %r8
+	6번째 인자: %r9 
+	*/
+
+
 	// TODO: Your implementation goes here.
 	switch(sys_number) {
 		case SYS_HALT:
 			halt();
 		case SYS_EXIT:
-			exit();
-		case SYS_FORK:
-			fork();		
-		case SYS_EXEC:
-			exec();
-		case SYS_WAIT:
-			wait();
+			exit(f->R.rdi);
+		// case SYS_FORK:
+		// 	fork(f->R.rdi);		
+		// case SYS_EXEC:
+		// 	exec(f->R.rdi);
+		// case SYS_WAIT:
+		// 	wait(f->R.rdi);
 		case SYS_CREATE:
-			create();		
+			create(f->R.rdi, f->R.rsi);		
 		case SYS_REMOVE:
-			remove();		
+			remove(f->R.rdi);		
 		case SYS_OPEN:
-			open();		
-		case SYS_FILESIZE:
-			filesize();
-		case SYS_READ:
-			read();
+			open(f->R.rdi);		
+		// case SYS_FILESIZE:
+		// 	filesize(f->R.rdi);
+		// case SYS_READ:
+		// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
 		case SYS_WRITE:
-			write();		
-		case SYS_SEEK:
-			seek();		
-		case SYS_TELL:
-			tell();		
-		case SYS_CLOSE:
-			close();	
+			write(f->R.rdi, f->R.rsi, f->R.rdx);		
+		// case SYS_SEEK:
+		// 	seek(f->R.rdi, f->R.rdx);		
+		// case SYS_TELL:
+		// 	tell(f->R.rdi);		
+		// case SYS_CLOSE:
+		// 	close(f->R.rdi);	
 	}
 	printf ("system call!\n");
+	printf("%d", sys_number);
 	thread_exit ();
 }
 
 /* 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수.	
 	유저 영역을 벗어난 영역일 경우 프로세스 종료 (exit(-1))*/
 void check_address(void *addr) {
+	struct thread *t = thread_current();
 	/* --- Project 2: User memory access --- */
-	if (!is_user_vaddr(addr)||addr == NULL)
+	// if (!is_user_vaddr(addr)||addr == NULL) 
+	//-> 이 경우는 유저 주소 영역 내에서도 할당되지 않는 공간 가리키는 것을 체크하지 않음. 그래서 
+	// pml4_get_page를 추가해줘야!
+	if (!is_user_vaddr(addr)||addr == NULL||
+	pml4_get_page(t->pml4, addr)== NULL)
 	{
 		exit(-1);
 	}
 }
-/* 유저 스택에 있는 인자들을 커널에 저장하는 함수. 스택 포인터(esp)에 count(인자 개수)만큼의 데이터를 arg에 저장.*/
-void get_argument(void *esp, int *arg, int count) {
-	/* --- project 2: system call ---*/
-	int *esp_ = esp; // 4바이트 => int 사이즈!
-	for (int i = 0; i < count; i++) {
-		check_address(&esp_[i]);
-		check_address(&arg[i]);
-		arg[i] = esp_[i];
-	}
-}
+/* 유저 스택에 있는 인자들을 커널에 저장하는 함수 get_argument()는 x86-64에서는 구현하지 X.*/
 
+
+/* pintos 종료시키는 함수 */
 void halt(void){
-	/* pintos 종료시키는 함수 */
 	power_off();
 }
 
+/* 현재 프로세스를 종료시키는 시스템 콜 */
 void exit(int status)
-{	
+{
 	struct thread *t = thread_current();
-	/* 현재 프로세스를 종료시키는 시스템 콜 */
+	t->exit_status = status;
 	printf("%s: exit%d\n", t->name, status); // Process Termination Message
 	/* 정상적으로 종료됐다면 status는 0 */
 	/* status: 프로그램이 정상적으로 종료됐는지 확인 */
 	thread_exit();
 }
 
+/* 파일 생성하는 시스템 콜 */
 bool create (const char *file, unsigned initial_size) {
-	/* 파일 생성하는 시스템 콜 */
 	/* 성공이면 true, 실패면 false */
+	check_address(file);
 	if (filesys_create(file, initial_size)) {
 		return true;
 	}
@@ -129,6 +168,7 @@ bool create (const char *file, unsigned initial_size) {
 }
 
 bool remove (const char *file) {
+	check_address(file);
 	if (filesys_remove(file)) {
 		return true;
 	} else {
@@ -136,4 +176,44 @@ bool remove (const char *file) {
 	}
 }
 
+/* 
+부모 복사해서 자식 프로세스 생성하는 함수.
+부모: 성공시 자식 pid 반환 / 실패 시 -1
+자식: 성공시 0 반환
+ */
+tid_t fork (const char *thread_name, struct intr_frame *f) {
+	return process_fork(thread_name, f);
+}
 
+int write (int fd, const void *buffer, unsigned size) {
+	if (fd == STDOUT_FILENO)
+		putbuf(buffer, size);
+	return size;
+}
+
+
+
+
+int open (const char *file) {
+	check_address(file); // 먼저 주소 유효한지 늘 체크
+	struct file *file_obj = filesys_open(file);
+	
+	// 제대로 파일 생성됐는지 체크
+	if (file_obj == NULL) {
+		return -1;
+	}
+	int fd = add_file_to_fd_table(file_obj);
+
+	// 만약 파일을 열 수 없으면] -1을 받음
+	if (fd == -1) {
+		file_close(file_obj);
+	}
+	return fd;
+
+}
+ /* 파일을 fdt에 추가 */
+int add_file_to_fd_table(struct file *file) {
+	struct thread *t = thread_current();
+	//struct file **fdt = t->file_descriptor_table;
+
+}
