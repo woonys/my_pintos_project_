@@ -4,6 +4,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
+
 #include "threads/flags.h"
 #include "threads/synch.h"
 #include "threads/init.h" 
@@ -117,7 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// case SYS_CLOSE:
 		// 	close(f->R.rdi);	
 	}
-	printf ("system call!\n");
+	//printf ("system call!\n");
 	printf("%d", sys_number);
 	thread_exit ();
 }
@@ -190,7 +191,6 @@ int write (int fd, const void *buffer, unsigned size) {
 		putbuf(buffer, size);
 	return size;
 }
-
 
 
 

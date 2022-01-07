@@ -49,14 +49,14 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 	/* project 2. command line parsing */
-	// char *token, *last;
-	// token = strtok_r(file_name, " ", &last);
-	// tid = thread_create (token, PRI_DEFAULT, initd, fn_copy);
+	char *token, *last;
+	token = strtok_r(file_name, " ", &last);
+	tid = thread_create (token, PRI_DEFAULT, initd, fn_copy);
 	/* project 2. command line parsing */
 
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	//tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -81,6 +81,18 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
+
+	/* --- Project 2: system call --- */
+	struct thread *cur = thread_current();
+	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 부모 프로세스 메모리를 복사
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur); // 전달받은 thread_name으로 __do_fork()를 진행
+
+	if (tid == TID_ERROR) {
+		return TID_ERROR;
+	}
+
+	
 	return thread_create (name,
 			PRI_DEFAULT, __do_fork, thread_current ());
 }
@@ -128,6 +140,7 @@ __do_fork (void *aux) {
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
+	parent_if = &parent->parent_if;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -166,7 +179,7 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도록 프로그램을 메모리에 적재하고 실행하는 함수. 여기에 파일 네임 인자로 받아서 저장(문자열) => 근데 실행 프로그램 파일과 옵션이 분리되지 않은 상황.
+ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도록 프로그램을 메모리에 적재하고 실행하는 함수. 여기에 파일 네임 인자로 받아서 저장(문자열) => 근데 실행 프로그램 파일과 옵션이 분리되지 않은 상황.
 	char *file_name = f_name; // f_name은 문자열인데 위에서 (void *)로 넘겨받음! -> 문자열로 인식하기 위해서 char * 로 변환해줘야.
 	bool success;
 	/* --- Project 2: Command_line_parsing ---*/
@@ -203,7 +216,7 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	// _if: context switching에 필요한 정보.
 	
 	/* If load failed, quit. */
-	//palloc_free_page(file_name);
+	////palloc_free_page(file_name);
 	if (!success)
 	{
 		return -1;
@@ -212,7 +225,7 @@ process_exec (void *f_name) { // 유저가 입력한 명령어를 수행하도�
 	
 	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* --- Project 2: Command_line_parsing ---*/
-	//palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
+	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
 	/* Start switched process. */
 	
 	do_iret (&_if);
@@ -287,7 +300,8 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	
 	/* --- Project 2: Command_line_parsing ---*/
-	while (1){}
+	//while (1){}
+	for(int i = 0; i < 100000000; i++); // 테스트를 위해 잠시 무한루프 해제 -> fork 완성 전까지만
 	/* --- Project 2: Command_line_parsing ---*/
 	return -1;
 }
