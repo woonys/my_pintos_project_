@@ -33,6 +33,7 @@ bool remove (const char *file);
 int open (const char *file);
 int write (int fd, const void *buffer, unsigned size);
 int exec(char *file_name);
+int filesize(int fd);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -105,8 +106,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			remove(f->R.rdi);		
 		case SYS_OPEN:
 			open(f->R.rdi);		
-		// case SYS_FILESIZE:
-		// 	filesize(f->R.rdi);
+		 case SYS_FILESIZE:
+		 	filesize(f->R.rdi);
 		// case SYS_READ:
 		// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
 		case SYS_WRITE:
@@ -230,3 +231,26 @@ int add_file_to_fd_table(struct file *file) {
 	return fd;
 
 }
+
+/*  fd 값을 넣으면 해당 file을 반환하는 함수 */
+struct file *fd_to_struct_filep(int fd) {
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return NULL;
+	}
+
+	struct thread *t = thread_current();
+	struct file **fdt = t->file_descriptor_table;
+	
+	struct file *file = fdt[fd];
+	return file;
+}
+
+/* file size를 반환하는 함수 */
+int filesize(int fd) {
+	struct file *fileobj = fd_to_struct_filep(fd);
+	if (fileobj == NULL) {
+		return -1;
+	}
+	file_length(fileobj);
+}
+
