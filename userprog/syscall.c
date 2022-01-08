@@ -34,6 +34,7 @@ int open (const char *file);
 int write (int fd, const void *buffer, unsigned size);
 int exec(char *file_name);
 int filesize(int fd);
+int read(int fd, void *buffer, unsigned size);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -67,6 +68,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
+	lock_init(&filesys_lock);
 }
 
 
@@ -108,8 +111,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			open(f->R.rdi);		
 		 case SYS_FILESIZE:
 		 	filesize(f->R.rdi);
-		// case SYS_READ:
-		// 	read(f->R.rdi, f->R.rsi, f->R.rdx);
+		case SYS_READ:
+			read(f->R.rdi, f->R.rsi, f->R.rdx);
 		case SYS_WRITE:
 			write(f->R.rdi, f->R.rsi, f->R.rdx);		
 		// case SYS_SEEK:
@@ -188,11 +191,26 @@ tid_t fork (const char *thread_name, struct intr_frame *f) {
 }
 
 int write (int fd, const void *buffer, unsigned size) {
-	if (fd == STDOUT_FILENO)
+	check_address(buffer);
+	struct file *fileobj = fd_to_struct_filep(fd);
+	int read_count;
+	if (fd == STDOUT_FILENO) {
 		putbuf(buffer, size);
-	return size;
-}
+		read_count = size;
+	}	
+	
+	else if (fd == STDIN_FILENO) {
+		return -1;
+	}
 
+	else {
+		
+		lock_acquire(&filesys_lock);
+		read_count = file_write(fileobj, buffer, size);
+		lock_release(&filesys_lock);
+
+	}
+}
 
 
 int open (const char *file) {
@@ -254,3 +272,40 @@ int filesize(int fd) {
 	file_length(fileobj);
 }
 
+int read(int fd, void *buffer, unsigned size) {
+	// 유효한 주소인지부터 체크
+	check_address(buffer); // 버퍼 시작 주소 체크
+	check_address(buffer + size -1); // 버퍼 끝 주소도 유저 영역 내에 있는지 체크
+	unsigned char *buf = buffer;
+	int read_count;
+	
+	struct file *fileobj = fd_to_struct_filep(fd);
+
+	if (fileobj == NULL) {
+		return -1;
+	}
+
+	/* STDIN일 때: */
+	if (fd == STDIN_FILENO) {
+		char key;
+		for (int read_count = 0; read_count < size; read_count++) {
+			key  = input_getc();
+			*buf++ = key;
+			if (key == '\0') { // 엔터값
+				break;
+			}
+		}
+	}
+	/* STDOUT일 때: -1 반환 */
+	else if (fd == STDOUT_FILENO){
+		return -1;
+	}
+
+	else {
+		lock_acquire(&filesys_lock);
+		read_count = file_read(fileobj, buffer, size); // 파일 읽어들일 동안만 lock 걸어준다.
+		lock_release(&filesys_lock);
+
+	}
+	return read_count;
+}
