@@ -297,6 +297,11 @@ struct file *fd_to_struct_filep(int fd) {
 /* file size를 반환하는 함수 */
 int filesize(int fd) {
 	struct file *fileobj = fd_to_struct_filep(fd);
+
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return;
+	}
+	
 	if (fileobj == NULL) {
 		return -1;
 	}
@@ -311,6 +316,10 @@ int read(int fd, void *buffer, unsigned size) {
 	int read_count;
 	
 	struct file *fileobj = fd_to_struct_filep(fd);
+
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return;
+	}
 
 	if (fileobj == NULL) {
 		return -1;
@@ -345,6 +354,10 @@ void seek(int fd, unsigned position) {
 	if (fd < 2) {
 		return;
 	}
+
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return;
+	}
 	struct file *file = fd_to_struct_filep(fd);
 	check_address(file);
 	if (file == NULL) {
@@ -356,6 +369,10 @@ void seek(int fd, unsigned position) {
 
 unsigned tell (int fd) {
 	if (fd <2) {
+		return;
+	}
+
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
 		return;
 	}
 	struct file *file = fd_to_struct_filep(fd);
@@ -375,6 +392,10 @@ void close (int fd) {
 	check_address(file);
 	if (file == NULL) {
 		return;
+	
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return;
+	}
 	thread_current()->file_descriptor_table[fd] = NULL;
 	}
 }
