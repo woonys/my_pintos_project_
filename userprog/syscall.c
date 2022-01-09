@@ -36,7 +36,9 @@ int write (int fd, const void *buffer, unsigned size);
 int filesize(int fd);
 
 void seek(int fd, unsigned position);
+unsigned tell (int fd);
 
+void close (int fd);
 int exec(char *file_name);
 
 void syscall_entry (void);
@@ -123,22 +125,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		 case SYS_FILESIZE:
 		 	filesize(f->R.rdi);
-			 break;
+			break;
 		case SYS_READ:
 			read(f->R.rdi, f->R.rsi, f->R.rdx);
 			break;
 		case SYS_WRITE:
 			f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 			break;
-		default:
-			thread_exit();
 		case SYS_SEEK:
 			seek(f->R.rdi, f->R.rdx);
 			break;	
-		// case SYS_TELL:
-		// 	tell(f->R.rdi);		
-		// case SYS_CLOSE:
-		// 	close(f->R.rdi);	
+		case SYS_TELL:
+			tell(f->R.rdi);
+			break;	
+		case SYS_CLOSE:
+			close(f->R.rdi);
+		default:
+			thread_exit();
 	}
 	//thread_exit();
 	//printf ("system call!\n");
@@ -347,6 +350,7 @@ void seek(int fd, unsigned position) {
 	if (file == NULL) {
 		return;
 	}
+	
 	file_seek(file, position);
 }
 
@@ -362,3 +366,16 @@ unsigned tell (int fd) {
 	return file_tell(fd);
 
 }
+
+void close (int fd) {
+	if (fd < 2) {
+		return;
+	}
+	struct file *file = fd_to_struct_filep(fd);
+	check_address(file);
+	if (file == NULL) {
+		return;
+	thread_current()->file_descriptor_table[fd] = NULL;
+	}
+}
+
