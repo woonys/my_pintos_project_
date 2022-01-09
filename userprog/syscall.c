@@ -132,8 +132,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		default:
 			thread_exit();
-		// case SYS_SEEK:
-		// 	seek(f->R.rdi, f->R.rdx);		
+		case SYS_SEEK:
+			seek(f->R.rdi, f->R.rdx);
+			break;	
 		// case SYS_TELL:
 		// 	tell(f->R.rdi);		
 		// case SYS_CLOSE:
@@ -335,4 +336,29 @@ int read(int fd, void *buffer, unsigned size) {
 
 	}
 	return read_count;
+}
+
+void seek(int fd, unsigned position) {
+	if (fd < 2) {
+		return;
+	}
+	struct file *file = fd_to_struct_filep(fd);
+	check_address(file);
+	if (file == NULL) {
+		return;
+	}
+	file_seek(file, position);
+}
+
+unsigned tell (int fd) {
+	if (fd <2) {
+		return;
+	}
+	struct file *file = fd_to_struct_filep(fd);
+	check_address(file);
+	if (file == NULL) {
+		return;
+	}
+	return file_tell(fd);
+
 }
