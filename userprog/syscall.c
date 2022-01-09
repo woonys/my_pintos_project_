@@ -31,10 +31,13 @@ void close (int fd);
 bool create (const char *file , unsigned initial_size);
 bool remove (const char *file);
 int open (const char *file);
-int write (int fd, const void *buffer, unsigned size);
-int exec(char *file_name);
-int filesize(int fd);
 int read(int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
+int filesize(int fd);
+
+void seek(int fd, unsigned position);
+
+int exec(char *file_name);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -56,6 +59,7 @@ void syscall_handler (struct intr_frame *);
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 
+struct lock filesys_lock;
 
 void
 syscall_init (void) {
@@ -69,7 +73,9 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 
+	/* -------- project 2-3------------- */
 	lock_init(&filesys_lock);
+	/* -------- project 2-3------------- */
 }
 
 
@@ -79,6 +85,8 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	/* 유저 스택에 저장되어 있는 시스템 콜 넘버를 가져와야지 일단 */
+	uintptr_t *rsp = f->rsp;
+	check_address((void *) rsp); 
 	int sys_number = f->R.rax; // rax: 시스템 콜 넘버
 	/* 
 	인자 들어오는 순서:
@@ -93,10 +101,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 	// TODO: Your implementation goes here.
 	switch(sys_number) {
-		case SYS_HALT:
+		case (SYS_HALT):
 			halt();
 		case SYS_EXIT:
 			exit(f->R.rdi);
+			break;
 		// case SYS_FORK:
 		// 	fork(f->R.rdi);		
 		// case SYS_EXEC:
@@ -104,17 +113,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// case SYS_WAIT:
 		// 	wait(f->R.rdi);
 		case SYS_CREATE:
-			create(f->R.rdi, f->R.rsi);		
+			create(f->R.rdi, f->R.rsi);	
+			break;	
 		case SYS_REMOVE:
 			remove(f->R.rdi);		
+			break;
 		case SYS_OPEN:
 			open(f->R.rdi);		
+			break;
 		 case SYS_FILESIZE:
 		 	filesize(f->R.rdi);
+			 break;
 		case SYS_READ:
 			read(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
 		case SYS_WRITE:
-			write(f->R.rdi, f->R.rsi, f->R.rdx);		
+			f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
+		default:
+			thread_exit();
 		// case SYS_SEEK:
 		// 	seek(f->R.rdi, f->R.rdx);		
 		// case SYS_TELL:
@@ -122,9 +139,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// case SYS_CLOSE:
 		// 	close(f->R.rdi);	
 	}
-	printf ("system call!\n");
-	printf("%d", sys_number);
-	thread_exit ();
+	//thread_exit();
+	//printf ("system call!\n");
+	//printf("%d", sys_number);
 }
 
 /* 주소 값이 유저 영역에서 사용하는 주소 값인지 확인하는 함수.	
@@ -154,7 +171,7 @@ void exit(int status)
 {
 	struct thread *t = thread_current();
 	t->exit_status = status;
-	printf("%s: exit%d\n", t->name, status); // Process Termination Message
+	printf("%s: exit(%d)\n", t->name, status); // Process Termination Message
 	/* 정상적으로 종료됐다면 status는 0 */
 	/* status: 프로그램이 정상적으로 종료됐는지 확인 */
 	thread_exit();
@@ -190,26 +207,36 @@ tid_t fork (const char *thread_name, struct intr_frame *f) {
 	return process_fork(thread_name, f);
 }
 
+
 int write (int fd, const void *buffer, unsigned size) {
 	check_address(buffer);
 	struct file *fileobj = fd_to_struct_filep(fd);
 	int read_count;
+
+	lock_acquire(&filesys_lock);
 	if (fd == STDOUT_FILENO) {
 		putbuf(buffer, size);
 		read_count = size;
+
 	}	
 	
 	else if (fd == STDIN_FILENO) {
+		lock_release(&filesys_lock);
 		return -1;
 	}
 
-	else {
+	else if (fd >= 2){
 		
-		lock_acquire(&filesys_lock);
-		read_count = file_write(fileobj, buffer, size);
+		if (fileobj == NULL) {
 		lock_release(&filesys_lock);
+		exit(-1);
+		}
 
+		read_count = file_write(fileobj, buffer, size);
+		
 	}
+	lock_release(&filesys_lock);
+	return read_count;
 }
 
 
