@@ -127,14 +127,13 @@ struct thread { // 이 struct thread 자체가 프로세스 디스크립터
 
 	/* --- Project2: User programs - system call --- */
 	int exit_status; // _exit(), _wait() 구현 때 사용
-	struct list child_list; // _wait() 구현 때 사용, process_wait() 함수
-	struct list_elem child_elem; // _wait() 구현 때 사용, process_wait() 함수
-	struct intr_frame parent_if; // _fork() 구현 때 사용, __do_fork() 함수
 	struct file **file_descriptor_table; //FDT
 	int fdidx; // fd index
-
 	
-
+	struct intr_frame parent_if; // _fork() 구현 때 사용, __do_fork() 함수
+	struct list child_list; // _wait() 구현 때 사용, process_wait() 함수
+	struct list_elem child_elem; // _wait() 구현 때 사용, process_wait() 함수
+	struct semaphore fork_sema; // _fork() 구현 시 사용, __do_fork() 함수 
 };
 
 /* If false (default), use round-robin scheduler.
