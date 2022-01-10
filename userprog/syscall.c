@@ -40,6 +40,7 @@ unsigned tell (int fd);
 
 void close (int fd);
 int exec(char *file_name);
+pid_t fork (const char *thread_name, struct intr_frame *f);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -108,8 +109,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_EXIT:
 			exit(f->R.rdi);
 			break;
-		// case SYS_FORK:
-		// 	fork(f->R.rdi);		
+		case SYS_FORK:
+			fork(f->R.rdi, f->R.rsi);		
 		// case SYS_EXEC:
 		// 	exec(f->R.rdi);
 		// case SYS_WAIT:
@@ -207,7 +208,7 @@ bool remove (const char *file) {
 부모: 성공시 자식 pid 반환 / 실패 시 -1
 자식: 성공시 0 반환
  */
-tid_t fork (const char *thread_name, struct intr_frame *f) {
+pid_t fork (const char *thread_name, struct intr_frame *f) {
 	return process_fork(thread_name, f);
 }
 
@@ -301,7 +302,7 @@ int filesize(int fd) {
 	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
 		return;
 	}
-	
+
 	if (fileobj == NULL) {
 		return -1;
 	}
@@ -337,7 +338,7 @@ int read(int fd, void *buffer, unsigned size) {
 		}
 	}
 	/* STDOUT일 때: -1 반환 */
-	else if (fd == STDOUT_FILENO){
+	else if (fd == STDOUT_FILENO) {
 		return -1;
 	}
 
@@ -345,7 +346,6 @@ int read(int fd, void *buffer, unsigned size) {
 		lock_acquire(&filesys_lock);
 		read_count = file_read(fileobj, buffer, size); // 파일 읽어들일 동안만 lock 걸어준다.
 		lock_release(&filesys_lock);
-
 	}
 	return read_count;
 }
