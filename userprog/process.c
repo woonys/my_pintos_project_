@@ -94,9 +94,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* --- Project 2: system call --- */
 	struct thread *child = get_child(pid);
 	sema_down(&child->fork_sema);
-	
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	return pid;
 }
 
 /* --- Project 2: system call --- */
