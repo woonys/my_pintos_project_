@@ -39,7 +39,7 @@ process_init (void) {
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t
-process_create_initd (const char *file_name) {
+	process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
 	/* Make a copy of FILE_NAME.
@@ -83,18 +83,37 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
 
 	/* --- Project 2: system call --- */
-	struct thread *cur = thread_current();
-	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame)); // 부모 프로세스 메모리를 복사
+	struct thread *parent = thread_current();
+	memcpy(&parent->parent_if, if_, sizeof(struct intr_frame)); // 부모 프로세스 메모리를 복사
 
-	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur); // 전달받은 thread_name으로 __do_fork()를 진행
+	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, parent); // 전달받은 thread_name으로 __do_fork()를 진행
 
-	if (tid == TID_ERROR) {
+	if (pid == TID_ERROR) {
 		return TID_ERROR;
 	}
-
+	/* --- Project 2: system call --- */
+	struct thread *child = get_child(pid);
+	sema_down(&child->fork_sema);
 	
 	return thread_create (name,
 			PRI_DEFAULT, __do_fork, thread_current ());
+}
+
+/* --- Project 2: system call --- */
+/* 
+인자로 넣은 pid에 해당하는 자식 스레드의 구조체를 얻은 후 sema_fork 값이
+1이 될 때(== 자식 스레드 load가 완료될 때)까지 기다렸다가 pid를 반환
+*/
+struct thread * get_child(int pid) {
+	struct thread *cur = thread_current ();
+	struct list *child_list = &cur->child_list;
+	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e)){
+		struct thread *t = list_entry(e, struct thread, child_elem);
+		if (t->tid == pid) {
+			return t;
+		}
+	}
+	return NULL;
 }
 
 #ifndef VM
@@ -184,9 +203,9 @@ int
 	bool success;
 	/* --- Project 2: Command_line_parsing ---*/
 	/* 원본 file name을 copy해오기 */
-	char file_name_copy[128]; // 스택에 저장
-	// file_name_copy = palloc_get_page(PAL_USER); // 이렇게는 가능 but 비효율적.
-	memcpy(file_name_copy, file_name, strlen(file_name)+1); // strlen에 +1? => 원래 문자열에는 \n이 들어가는데 strlen에서는 \n 앞까지만 읽고 끝내기 때문. 전체를 들고오기 위해 +1
+	
+	//char file_name_copy[128]; // 스택에 저장
+	//memcpy(file_name_copy, file_name, strlen(file_name)+1); // strlen에 +1? => 원래 문자열에는 \n이 들어가는데 strlen에서는 \n 앞까지만 읽고 끝내기 때문. 전체를 들고오기 위해 +1
 	/* --- Project 2: Command_line_parsing ---*/
 
 
@@ -210,7 +229,10 @@ int
 
 
 	/* And then load the binary */
-	success = load (file_name_copy, &_if); // file_name, _if를 현재 프로세스에 load.
+	success = load (file_name, &_if); // file_name, _if를 현재 프로세스에 load.
+	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
+	
+	
 	// success는 bool type이니까 load에 성공하면 1, 실패하면 0 반환.
 	// 이때 file_name: f_name의 첫 문자열을 parsing하여 넘겨줘야 한다!
 	// _if: context switching에 필요한 정보.
@@ -223,9 +245,8 @@ int
 	}
 
 	
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	//hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* --- Project 2: Command_line_parsing ---*/
-	palloc_free_page (file_name); // file_name: 프로그램 파일 받기 위해 만든 임시변수. 따라서 load 끝나면 메모리 반환.
 	/* Start switched process. */
 	
 	do_iret (&_if);
@@ -243,7 +264,7 @@ void argument_stack(char **argv, int argc, struct intr_frame *if_) { // if_는 �
 	// 거꾸로 삽입 => 스택은 반대 방향으로 확장하기 떄문!
 	
 	/* 맨 끝 NULL 값(arg[4]) 제외하고 스택에 저장(arg[0] ~ arg[3]) */
-	for (int i = argc-1; i>=0; i--) { 
+	for (int i = argc-1; i> -1; i--) { 
 		int argv_len = strlen(argv[i]);
 		/* 
 		if_->rsp: 현재 user stack에서 현재 위치를 가리키는 스택 포인터.
@@ -258,29 +279,35 @@ void argument_stack(char **argv, int argc, struct intr_frame *if_) { // if_는 �
 	/* word-align: 8의 배수 맞추기 위해 padding 삽입*/
 	while (if_->rsp % 8 != 0) 
 	{
-		if_->rsp--; // 주소값을 1 내리고
+		if_->rsp = if_->rsp -1; // 주소값을 1 내리고
 		*(uint8_t *) if_->rsp = 0; //데이터에 0 삽입 => 8바이트 저장
 	}
 
 	/* 이제는 주소값 자체를 삽입! 이때 센티넬 포함해서 넣기*/
 	
-	for (int i = argc; i >=0; i--) 
+	for (int j = argc; j > -1; j--) 
 	{ // 여기서는 NULL 값 포인터도 같이 넣는다.
 		if_->rsp = if_->rsp - 8; // 8바이트만큼 내리고
-		if (i == argc) { // 가장 위에는 NULL이 아닌 0을 넣어야지
+		if (j == argc) { // 가장 위에는 NULL이 아닌 0을 넣어야지
 			memset(if_->rsp, 0, sizeof(char **));
 		} else { // 나머지에는 arg_address 안에 들어있는 값 가져오기
-			memcpy(if_->rsp, &arg_address[i], sizeof(char **)); // char 포인터 크기: 8바이트
+			memcpy(if_->rsp, &arg_address[j], sizeof(char **)); // char 포인터 크기: 8바이트
 		}	
 	}
 	
+	if_->R.rsi = if_->rsp;
+	if_->R.rdi = argc;
 
-	/* fake return address */
-	if_->rsp = if_->rsp - 8; // void 포인터도 8바이트 크기
+	/* fake address(0) 저장*/
+	if_->rsp = if_->rsp - 8;
 	memset(if_->rsp, 0, sizeof(void *));
 
-	if_->R.rdi  = argc;
-	if_->R.rsi = if_->rsp + 8; // fake_address 바로 위: arg_address 맨 앞 가리키는 주소값!
+	/* fake return address */
+	// if_->rsp = if_->rsp - 8; // void 포인터도 8바이트 크기
+	// memset(if_->rsp, 0, sizeof(void *));
+
+	// if_->R.rdi  = argc;
+	// if_->R.rsi = if_->rsp + 8; // fake_address 바로 위: arg_address 맨 앞 가리키는 주소값!
 }
 
 
@@ -429,19 +456,28 @@ load (const char *file_name, struct intr_frame *if_) {
 	int i;
 
 	/* --- Project 2: Command_line_parsing ---*/
-	char *arg_list[128];
-	char *token, *save_ptr;
-	int token_count = 0;
+
+	char *argv[64];
+    char *token, *save_ptr;
+    int argc = 0;
+    for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+                                    token = strtok_r (NULL, " ", &save_ptr)) {
+        argv[argc] = token;
+        argc += 1;
+    }
+	// char *arg_list[128];
+	// char *token, *save_ptr;
+	// int token_count = 0;
  
-	token = strtok_r(file_name, " ", &save_ptr); // 첫번째 이름
-	//token = strtok_r(file_name_total, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
-	arg_list[token_count] = token; //arg_list[0] = file_name_first
+	// token = strtok_r(file_name, " ", &save_ptr); // 첫번째 이름
+	// //token = strtok_r(file_name_total, " ", &save_ptr); // 첫번째 이름을 받아온다. save_ptr: 앞에 애 자르고 남은 문자열의 가장 맨 앞을 가리키는 포인터 주소값!
+	// arg_list[token_count] = token; //arg_list[0] = file_name_first
 	
-	while (token != NULL) {
-		token = strtok_r (NULL, " ", &save_ptr);
-		token_count++;
-		arg_list[token_count] = token;
-	}
+	// while (token != NULL) {
+	// 	token = strtok_r (NULL, " ", &save_ptr);
+	// 	token_count++;
+	// 	arg_list[token_count] = token;
+	// }
 	/* --- Project 2: Command_line_parsing ---*/
 
 
@@ -536,7 +572,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 
 	/* --- Project 2: Command_line_parsing ---*/
-	argument_stack(arg_list, token_count, if_);
+	argument_stack(argv, argc, if_);
 	/* --- Project 2: Command_line_parsing ---*/
 
 
